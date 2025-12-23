@@ -101,7 +101,7 @@ class UserManager():
 
         return path
 
-    def add_user(self, name):
+    def add_user(self, name, password=None):
         name = name.strip()
         if not name:
             raise ValueError("username not provided")
@@ -112,7 +112,7 @@ class UserManager():
             raise ValueError("System User prefix not allowed")
         user_id = user_id + "_" + str(uuid.uuid4())
 
-        self.users[user_id] = name
+        self.users[user_id] = {"username": name, "password": password} if password else name
 
         with open(self.get_users_file(), "w") as f:
             json.dump(self.users, f)
@@ -122,6 +122,7 @@ class UserManager():
     def add_routes(self, routes):
         self.settings.add_routes(routes)
 
+        # 用户登录
         @routes.get("/users")
         async def get_users(request):
             if args.multi_user:
@@ -133,15 +134,17 @@ class UserManager():
                     "migrated": os.path.exists(user_dir)
                 })
 
+        # 创建用户
         @routes.post("/users")
         async def post_users(request):
             body = await request.json()
             username = body["username"]
+            password = body["password"]
             if username in self.users.values():
                 return web.json_response({"error": "Duplicate username."}, status=400)
 
             try:
-                user_id = self.add_user(username)
+                user_id = self.add_user(username, password)
             except ValueError as e:
                 return web.json_response({"error": str(e)}, status=400)
             return web.json_response(user_id)
