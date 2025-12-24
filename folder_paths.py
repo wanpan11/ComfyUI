@@ -202,46 +202,6 @@ def get_public_user_directory(user_id: str) -> str | None:
     return os.path.join(get_user_directory(), user_id)
 
 
-def get_user_input_directory(user_id: str) -> str:
-    """
-    Get the input directory for a specific user.
-    
-    Args:
-        user_id: User identifier
-        
-    Returns:
-        Absolute path to the user's input directory. Falls back to global input directory
-        for system users or invalid user IDs.
-    """
-    user_path = get_public_user_directory(user_id)
-    if user_path is None:
-        return get_input_directory()  # fallback for system users
-    input_dir = os.path.join(user_path, "input")
-    if not os.path.exists(input_dir):
-        os.makedirs(input_dir, exist_ok=True)
-    return input_dir
-
-
-def get_user_output_directory(user_id: str) -> str:
-    """
-    Get the output directory for a specific user.
-    
-    Args:
-        user_id: User identifier
-        
-    Returns:
-        Absolute path to the user's output directory. Falls back to global output directory
-        for system users or invalid user IDs.
-    """
-    user_path = get_public_user_directory(user_id)
-    if user_path is None:
-        return get_output_directory()  # fallback for system users
-    output_dir = os.path.join(user_path, "output")
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir, exist_ok=True)
-    return output_dir
-
-
 #NOTE: used in http server so don't put folders that should not be accessed remotely
 def get_directory_by_type(type_name: str) -> str | None:
     if type_name == "output":
