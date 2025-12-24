@@ -101,18 +101,24 @@ class UserManager():
 
         return path
 
-    def add_user(self, name):
+    def add_user(self, name, password=None):
         name = name.strip()
         if not name:
-            raise ValueError("username not provided")
+            raise ValueError("用户名不能为空")
+
+        for user in self.users.values():
+            existing_username = user.get("username") if isinstance(user, dict) else user
+            if existing_username == name:
+                raise ValueError("用户名已存在")
+
         if name.startswith(folder_paths.SYSTEM_USER_PREFIX):
-            raise ValueError("System User prefix not allowed")
+            raise ValueError("系统用户前缀不允许用于普通用户名")
         user_id = re.sub("[^a-zA-Z0-9-_]+", '-', name)
         if user_id.startswith(folder_paths.SYSTEM_USER_PREFIX):
-            raise ValueError("System User prefix not allowed")
+            raise ValueError("系统用户前缀不允许用于普通用户名")
         user_id = user_id + "_" + str(uuid.uuid4())
 
-        self.users[user_id] = name
+        self.users[user_id] = {"username": name, "password": password} if password else name
 
         with open(self.get_users_file(), "w") as f:
             json.dump(self.users, f)
@@ -122,26 +128,77 @@ class UserManager():
     def add_routes(self, routes):
         self.settings.add_routes(routes)
 
-        @routes.get("/users")
-        async def get_users(request):
-            if args.multi_user:
-                return web.json_response({"storage": "server", "users": self.users})
-            else:
-                user_dir = self.get_request_user_filepath(request, None, create_dir=False)
-                return web.json_response({
-                    "storage": "server",
-                    "migrated": os.path.exists(user_dir)
-                })
+        # 用户登录
+        @routes.post("/login")
+        async def post_login(request):
+            """
+            Login endpoint.
 
+            Expected JSON body: {"username": "...", "password": "..."}
+            - In multi-user mode: validates username and password (if set).
+                - Returns 200 and {"storage": "server", "users": self.users} on success.
+                - Returns 401 on invalid credentials.
+            - In single-user mode: returns storage and migration status as before.
+            """
+            try:
+                body = await request.json()
+            except Exception:
+                return web.json_response({"error": "参数错误！"}, status=400)
+
+            username = body.get("username")
+            password = body.get("password")
+
+            if not username:
+                return web.json_response({"error": "用户名未提供"}, status=400)
+
+            # Only support login in multi-user mode
+            if not args.multi_user:
+                return web.json_response({"error": "多用户模式未启用"}, status=400)
+
+            import hmac
+
+            # Only allow username-based login and require user entries to be dicts.
+            supplied = username.strip()
+            found_user_id = None
+            found_user_entry = None
+
+            for uid, entry in self.users.items():
+                # Only dict entries are considered valid user entries in this deployment
+                if not isinstance(entry, dict):
+                    continue
+
+                # Strict (case-sensitive) username match
+                if entry.get("username") == supplied:
+                    found_user_id = uid
+                    found_user_entry = entry
+                    break
+
+            if not found_user_id:
+                return web.json_response({"error": "用户名或密码无效"}, status=401)
+
+            # If a password is set for the user, require and validate it using constant-time compare
+            if "password" in found_user_entry and found_user_entry.get("password") is not None:
+                expected = str(found_user_entry.get("password"))
+                if password is None:
+                    return web.json_response({"error": "用户名或密码无效"}, status=401)
+                if not hmac.compare_digest(expected, str(password)):
+                    return web.json_response({"error": "用户名或密码无效"}, status=401)
+
+            # Return only the authenticated user's id and username
+            returned_username = found_user_entry.get("username")
+            return web.json_response({"userId": found_user_id, "username": returned_username})
+
+        # 创建用户
         @routes.post("/users")
         async def post_users(request):
             body = await request.json()
             username = body["username"]
+            password = body["password"]
             if username in self.users.values():
-                return web.json_response({"error": "Duplicate username."}, status=400)
+                return web.json_response({"error": "用户名已存在"}, status=400)
 
             try:
-                user_id = self.add_user(username)
+                user_id = self.add_user(username, password)
             except ValueError as e:
                 return web.json_response({"error": str(e)}, status=400)
             return web.json_response(user_id)
