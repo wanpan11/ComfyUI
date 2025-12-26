@@ -324,6 +324,8 @@ def setup_database():
         from app.database.db import init_db, dependencies_available
         if dependencies_available():
             init_db()
+        else:
+            logging.warning("Comfyui 暂不需要数据库，目前采用文件存储。")
     except Exception as e:
         logging.error(f"Failed to initialize database. Please ensure you have installed the latest requirements. If the error persists, please report this as in future the database will be required: {e}")
 

@@ -17,7 +17,7 @@ try:
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
-    _DB_AVAILABLE = True
+    # _DB_AVAILABLE = True
 except ImportError as e:
     log_startup_warning(
         f"""
